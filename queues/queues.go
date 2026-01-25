@@ -6,13 +6,26 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
 
+type Headers struct {
+	Method    string `json:"method"` // Publish/Consume
+	Issuer    string `json:"issuer"` //e.g: Backend
+	QueueName string `json:"queuename"`
+	Context   string `json:"context"` // optional topic. e.g: Emails,messages
+	Timestamp time.Time
+}
+
 type Message struct {
-	Context string
-	Payload string
+	Head    Headers     `json:"headers"`
+	PayLoad interface{} `json:"payload"`
+}
+
+type Config struct {
+	data_persist bool
 }
 
 type Queue struct { // Data structure for in-memory messages
@@ -51,6 +64,7 @@ func (q *Queue) Dequeue() Message {
 	return m
 }
 
+// After a sub is registered as a consumer we start a worker who will dispatch the queued messages automatically.
 func (s *Queue) StartDispacher(conn net.Conn) {
 	for {
 		if len(s.Channel) > 0 {

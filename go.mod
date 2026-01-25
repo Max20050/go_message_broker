@@ -1,4 +1,4 @@
-module github.com/maxabella/message_broker
+module github.com/Max20050/go_message_broker
 
 go 1.25.3
 

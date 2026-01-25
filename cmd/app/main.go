@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/maxabella/message_broker/server"
+	"github.com/Max20050/go_message_broker/server"
 )
 
 type Request struct {

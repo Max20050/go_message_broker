@@ -7,20 +7,8 @@ import (
 	"log"
 	"net"
 
-	"github.com/maxabella/message_broker/queues"
+	"github.com/Max20050/go_message_broker/queues"
 )
-
-type Headers struct {
-	Method    string `json:"method"` // Publish/Consume
-	Issuer    string `json:"issuer"` //e.g: Backend
-	QueueName string `json:"queuename"`
-	Context   string `json:"context"`
-}
-
-type Message struct {
-	Head    Headers `json:"headers"`
-	PayLoad string  `json:"payload"`
-}
 
 type Exchange struct {
 }
@@ -66,7 +54,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	for scanner.Scan() {
 		fmt.Println("message recieved")
 		jsonData := scanner.Bytes()
-		var msg Message
+		var msg queues.Message
 		if err := json.Unmarshal(jsonData, &msg); err != nil {
 			fmt.Printf("Error unmarshalling JSON: %v\n", err)
 			continue
@@ -76,17 +64,11 @@ func (s *Server) handleConnection(conn net.Conn) {
 			if !exists {
 				queue := queues.CreateQueue(msg.Head.QueueName, 1000)
 				s.Queues[msg.Head.QueueName] = &queue
-				queueMessage := queues.Message{
-					Context: msg.Head.Context,
-					Payload: msg.PayLoad,
-				}
-				s.Queues[msg.Head.QueueName].Enqueue(queueMessage)
+
+				s.Queues[msg.Head.QueueName].Enqueue(msg)
 			} else {
-				queueMessage := queues.Message{
-					Context: msg.Head.Context,
-					Payload: msg.PayLoad,
-				}
-				q.Enqueue(queueMessage)
+
+				q.Enqueue(msg)
 			}
 			fmt.Println("Message published")
 		}
