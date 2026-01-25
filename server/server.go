@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"log"
 	"net"
+
+	"github.com/maxabella/message_broker/queues"
 )
 
 type Headers struct {
-	Method string `json:"method"` // Publish/Consume
-	Issuer string `json:"issuer"` //e.g: Backend
+	Method    string `json:"method"` // Publish/Consume
+	Issuer    string `json:"issuer"` //e.g: Backend
+	QueueName string `json:"queuename"`
+	Context   string `json:"context"`
 }
 
 type Message struct {
@@ -18,9 +22,13 @@ type Message struct {
 	PayLoad string  `json:"payload"`
 }
 
+type Exchange struct {
+}
+
 type Server struct {
 	Port     string // Running server port
 	Listener net.Listener
+	Queues   map[string]*queues.Queue
 }
 
 func CreteTcpServer(port string) (Server, error) {
@@ -34,6 +42,7 @@ func CreteTcpServer(port string) (Server, error) {
 	return Server{
 		Port:     port,
 		Listener: Listener,
+		Queues:   make(map[string]*queues.Queue),
 	}, nil
 }
 
@@ -45,24 +54,52 @@ func (s *Server) Accept() error {
 			continue
 		}
 
-		// 3. Handle each connection concurrently in a new goroutine
-		go handleConnection(conn)
+		go s.handleConnection(conn) // Worker per connection
 	}
 
 }
 
-func handleConnection(conn net.Conn) {
+func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
+	fmt.Println(conn.RemoteAddr().String())
 	for scanner.Scan() {
+		fmt.Println("message recieved")
 		jsonData := scanner.Bytes()
 		var msg Message
 		if err := json.Unmarshal(jsonData, &msg); err != nil {
 			fmt.Printf("Error unmarshalling JSON: %v\n", err)
 			continue
 		}
-		fmt.Println(msg)
-		// ... (optional reply logic)
+		if msg.Head.Method == "PUBLISH" {
+			q, exists := s.Queues[msg.Head.QueueName]
+			if !exists {
+				queue := queues.CreateQueue(msg.Head.QueueName, 1000)
+				s.Queues[msg.Head.QueueName] = &queue
+				queueMessage := queues.Message{
+					Context: msg.Head.Context,
+					Payload: msg.PayLoad,
+				}
+				s.Queues[msg.Head.QueueName].Enqueue(queueMessage)
+			} else {
+				queueMessage := queues.Message{
+					Context: msg.Head.Context,
+					Payload: msg.PayLoad,
+				}
+				q.Enqueue(queueMessage)
+			}
+			fmt.Println("Message published")
+		}
+		if msg.Head.Method == "CONSUME" {
+			fmt.Println("consume initiated")
+			q, exists := s.Queues[msg.Head.QueueName]
+			if !exists {
+				// Return error
+			} else {
+				q.StartDispacher(conn)
+			}
+			fmt.Println("Message Consumed")
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Printf("Error reading from connection: %v\n", err)
