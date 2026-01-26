@@ -52,11 +52,16 @@ func (s *Server) handleConnection(conn net.Conn) {
 	scanner := bufio.NewScanner(conn)
 	fmt.Println(conn.RemoteAddr().String())
 	for scanner.Scan() {
-		fmt.Println("message recieved")
+		fmt.Println("message received")
 		jsonData := scanner.Bytes()
+
+		// DEBUG: Print the exact JSON received
+		fmt.Printf("Raw JSON: %s\n", string(jsonData))
+
 		var msg queues.Message
 		if err := json.Unmarshal(jsonData, &msg); err != nil {
 			fmt.Printf("Error unmarshalling JSON: %v\n", err)
+			fmt.Printf("JSON was: %s\n", string(jsonData))
 			continue
 		}
 		if msg.Head.Method == "PUBLISH" {

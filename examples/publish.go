@@ -19,10 +19,10 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	em := Email{
-		From:    "Maximoabella12@gmail.com",
-		Subject: "Example",
-		Content: "This is an example email",
+	em := map[string]interface{}{
+		"from":    "maxmimoabella12@gmail.com",
+		"subject": "Example Email",
+		"content": "This is an example email",
 	}
 	for {
 		time.Sleep(time.Second * 5) // Wait 5 and send message to queue

@@ -10,9 +10,9 @@ import (
 )
 
 type Email struct {
-	From    string
-	Subject string
-	Content string
+	From    string `json:"from"`
+	Subject string `json:"subject"`
+	Content string `json:"content"`
 }
 
 type Headers struct {
@@ -41,12 +41,12 @@ func main() {
 	}
 
 	for {
-		var email Message
+		var decoded Message
 		msg := <-msgs
-		if err := json.Unmarshal(msg, &email); err != nil {
+		if err := json.Unmarshal(msg, &decoded); err != nil {
 			log.Printf("❌ Error unmarshalling message: %v", err)
 			continue
 		}
-		fmt.Println(email)
+		fmt.Println(decoded)
 	}
 }

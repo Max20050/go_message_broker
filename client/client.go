@@ -6,20 +6,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 )
 
 // Message headers
 type Headers struct {
-	Method    string `json:"method"` // Publish/Consume
-	Issuer    string `json:"issuer"` //e.g: Backend
-	QueueName string `json:"queuename"`
-	Context   string `json:"context"`
+	Method    string    `json:"method"` // Publish/Consume
+	Issuer    string    `json:"issuer"` //e.g: Backend
+	QueueName string    `json:"queuename"`
+	Context   string    `json:"context"`
+	Timestamp time.Time `json:"timestamp"` // Add this field
 }
 
 // Full message sent to the broker
 type Message struct {
-	Head    Headers     `json:"headers"`
-	PayLoad interface{} `json:"payload"`
+	Head    Headers         `json:"headers"`
+	PayLoad json.RawMessage `json:"payload"`
 }
 
 type Broker struct {
@@ -41,27 +43,39 @@ func ConnectBroker(address string, port string) (Broker, error) {
 }
 
 func (b *Broker) Publish(ctx context.Context, publisher string, topic string, Qname string, message interface{}) error {
+	// Marshal the message to JSON bytes
+	payloadBytes, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
 	msg := Message{
 		Head: Headers{
 			Method:    "PUBLISH",
 			Issuer:    publisher,
 			QueueName: Qname,
 			Context:   topic,
+			Timestamp: time.Now(),
 		},
-		PayLoad: message,
+		PayLoad: json.RawMessage(payloadBytes), // This should be []byte containing JSON
 	}
 
-	encoder := json.NewEncoder(b.connection)
-	err := encoder.Encode(msg)
+	// Marshal the entire message
+	fullMessageBytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	return nil
+
+	// Send with newline for scanner
+	fullMessageBytes = append(fullMessageBytes, '\n')
+
+	_, err = b.connection.Write(fullMessageBytes)
+	return err
 }
 
-func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (chan []byte, error) {
+func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (chan Message, error) {
 
-	msg := make(chan []byte)
+	msg := make(chan Message)
 
 	request := Message{
 		Head: Headers{
@@ -69,8 +83,7 @@ func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (ch
 			Issuer:    "Backend",
 			QueueName: "default",
 			Context:   "main",
-		},
-		PayLoad: "Hello from client",
+		}, // no payload as its not needed for consume request
 	}
 
 	encoder := json.NewEncoder(b.connection)
@@ -88,8 +101,18 @@ func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (ch
 				fmt.Println("Connection closed by server")
 				return
 			}
-			msg <- data
+			var message Message
+			if err := json.Unmarshal(data, &message); err != nil {
+				fmt.Printf("Error unmarshalling JSON: %v\n", err)
+				fmt.Printf("JSON was: %s\n", string(data))
+				continue
+			}
+			msg <- message
 		}
 	}()
 	return msg, nil
+}
+
+func GetBytes(key interface{}) ([]byte, error) {
+	return json.Marshal(key)
 }
