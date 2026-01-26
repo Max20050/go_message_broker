@@ -41,9 +41,9 @@ func main() {
 	}
 
 	for {
-		var decoded Message
+		var decoded Email
 		msg := <-msgs
-		if err := json.Unmarshal(msg, &decoded); err != nil {
+		if err := json.Unmarshal(msg.PayLoad, &decoded); err != nil {
 			log.Printf("❌ Error unmarshalling message: %v", err)
 			continue
 		}
