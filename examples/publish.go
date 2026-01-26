@@ -26,6 +26,6 @@ func main() {
 	}
 	for {
 		time.Sleep(time.Second * 5) // Wait 5 and send message to queue
-		broker.Publish(context.Background(), "Backend 1", "Emails", "emails", em)
+		broker.Publish(context.Background(), "Backend 1", "Emails", "default", em)
 	}
 }
