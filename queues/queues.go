@@ -12,11 +12,11 @@ import (
 )
 
 type Headers struct {
-	Method    string `json:"method"` // Publish/Consume
-	Issuer    string `json:"issuer"` //e.g: Backend
-	QueueName string `json:"queuename"`
-	Context   string `json:"context"` // optional topic. e.g: Emails,messages
-	Timestamp time.Time
+	Method    string    `json:"method"` // Publish/Consume
+	Issuer    string    `json:"issuer"` //e.g: Backend
+	QueueName string    `json:"queuename"`
+	Context   string    `json:"context"`   // optional topic. e.g: Emails,messages
+	Timestamp time.Time `json:"timestamp"` // Time
 }
 
 type Message struct {
