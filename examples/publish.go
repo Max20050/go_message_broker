@@ -19,12 +19,14 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	em := map[string]interface{}{
-		"from":    "maxmimoabella12@gmail.com",
-		"subject": "Example Email",
-		"content": "This is an example email",
-	}
+	counter := 0
 	for {
+		counter++
+		em := map[string]interface{}{
+			"from":    "maxmimoabella12@gmail.com",
+			"subject": "Example Email",
+			"content": ("This is the email number: " + string(rune(counter))),
+		}
 		time.Sleep(time.Second * 5) // Wait 5 and send message to queue
 		broker.Publish(context.Background(), "Backend 1", "Emails", "default", em)
 	}

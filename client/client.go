@@ -19,8 +19,22 @@ type Headers struct {
 }
 
 // Full message sent to the broker
-type Message struct {
+type MessagePublisher struct {
 	Head    Headers         `json:"headers"`
+	PayLoad json.RawMessage `json:"payload"`
+}
+
+type FullHeaders struct {
+	Method    string    `json:"method"` // Publish/Consume
+	Issuer    string    `json:"issuer"` //e.g: Backend
+	QueueName string    `json:"queuename"`
+	Context   string    `json:"context"`
+	Timestamp time.Time `json:"timestamp"` // Add this field
+}
+
+// Full message sent to the broker
+type MessageConsumer struct {
+	Head    FullHeaders     `json:"headers"`
 	PayLoad json.RawMessage `json:"payload"`
 }
 
@@ -49,7 +63,7 @@ func (b *Broker) Publish(ctx context.Context, publisher string, topic string, Qn
 		return err
 	}
 
-	msg := Message{
+	msg := MessagePublisher{
 		Head: Headers{
 			Method:    "PUBLISH",
 			Issuer:    publisher,
@@ -73,11 +87,11 @@ func (b *Broker) Publish(ctx context.Context, publisher string, topic string, Qn
 	return err
 }
 
-func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (chan Message, error) {
+func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (chan MessageConsumer, error) {
 
-	msg := make(chan Message)
+	msg := make(chan MessageConsumer) // handle server push
 
-	request := Message{
+	request := MessagePublisher{
 		Head: Headers{
 			Method:    "CONSUME",
 			Issuer:    "Backend",
@@ -101,7 +115,7 @@ func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (ch
 				fmt.Println("Connection closed by server")
 				return
 			}
-			var message Message
+			var message MessageConsumer
 			if err := json.Unmarshal(data, &message); err != nil {
 				fmt.Printf("Error unmarshalling JSON: %v\n", err)
 				fmt.Printf("JSON was: %s\n", string(data))
@@ -113,6 +127,6 @@ func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (ch
 	return msg, nil
 }
 
-func GetBytes(key interface{}) ([]byte, error) {
+func GetBytes(key any) ([]byte, error) {
 	return json.Marshal(key)
 }

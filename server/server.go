@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/Max20050/go_message_broker/models"
 	"github.com/Max20050/go_message_broker/queues"
 )
 
@@ -34,6 +35,7 @@ func CreteTcpServer(port string) (Server, error) {
 	}, nil
 }
 
+// We accept the tcp connections to our server and create a worker to handle the communication
 func (s *Server) Accept() error {
 	for {
 		conn, err := s.Listener.Accept()
@@ -41,10 +43,8 @@ func (s *Server) Accept() error {
 			log.Println("Error accepting connection:", err)
 			continue
 		}
-
 		go s.handleConnection(conn) // Worker per connection
 	}
-
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
@@ -58,7 +58,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		// DEBUG: Print the exact JSON received
 		fmt.Printf("Raw JSON: %s\n", string(jsonData))
 
-		var msg queues.Message
+		var msg models.RecievedMessage
 		if err := json.Unmarshal(jsonData, &msg); err != nil {
 			fmt.Printf("Error unmarshalling JSON: %v\n", err)
 			fmt.Printf("JSON was: %s\n", string(jsonData))
@@ -67,13 +67,12 @@ func (s *Server) handleConnection(conn net.Conn) {
 		if msg.Head.Method == "PUBLISH" {
 			q, exists := s.Queues[msg.Head.QueueName]
 			if !exists {
-				queue := queues.CreateQueue(msg.Head.QueueName, 1000)
+				queue := queues.CreateQueue(msg.Head.QueueName, 1000) // Replace with DeclareQueue -> Needed for consumers and good practice
 				s.Queues[msg.Head.QueueName] = &queue
 
-				s.Queues[msg.Head.QueueName].Enqueue(msg)
+				s.Queues[msg.Head.QueueName].Enqueue(msg.ToStorage())
 			} else {
-
-				q.Enqueue(msg)
+				q.Enqueue(msg.ToStorage())
 			}
 			fmt.Println("Message published")
 		}

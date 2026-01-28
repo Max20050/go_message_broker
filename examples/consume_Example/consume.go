@@ -43,6 +43,7 @@ func main() {
 	for {
 		var decoded Email
 		msg := <-msgs
+		fmt.Println("Message headers: ", msg.Head)
 		if err := json.Unmarshal(msg.PayLoad, &decoded); err != nil {
 			log.Printf("❌ Error unmarshalling message: %v", err)
 			continue

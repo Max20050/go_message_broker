@@ -6,34 +6,22 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
+	"github.com/Max20050/go_message_broker/models"
 	"github.com/google/uuid"
 )
 
-type Headers struct {
-	Method    string    `json:"method"` // Publish/Consume
-	Issuer    string    `json:"issuer"` //e.g: Backend
-	QueueName string    `json:"queuename"`
-	Context   string    `json:"context"`   // optional topic. e.g: Emails,messages
-	Timestamp time.Time `json:"timestamp"` // Time
-}
-
-type Message struct {
-	Head    Headers     `json:"headers"`
-	PayLoad interface{} `json:"payload"`
-}
-
 type Config struct {
-	data_persist bool
+	data_persist bool // TODO
 }
 
 type Queue struct { // Data structure for in-memory messages
 	Id       uuid.UUID
 	Name     string
-	mu       *sync.Mutex  // lock for race conditions
-	Channel  chan Message // Primary queue stream limited size
-	overflow *list.List   // overflow unlimited size but less performative
+	mu       *sync.Mutex                        // lock for race conditions
+	Channel  chan models.StoredMessage          // Primary queue stream limited size
+	overflow *list.List                         // overflow unlimited size but less performative
+	InFlight map[uuid.UUID]models.StoredMessage // in-flight messages waiting to be acked or nacked and requeued
 }
 
 func CreateQueue(name string, queueSize int) Queue {
@@ -41,15 +29,22 @@ func CreateQueue(name string, queueSize int) Queue {
 	return Queue{
 		Id:       id,
 		Name:     name,
-		Channel:  make(chan Message, queueSize),
+		Channel:  make(chan models.StoredMessage, queueSize),
 		overflow: list.New(),
 		mu:       new(sync.Mutex),
 	}
 }
 
-func (q *Queue) Enqueue(m Message) {
+func (q *Queue) ToInflight(msg models.StoredMessage) {
+	q.InFlight[msg.Head.MessageId] = msg
+}
+
+func (q *Queue) Enqueue(m models.StoredMessage) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
+	mId := uuid.New()
+	m.Head.MessageId = mId
 	if len(q.Channel) == cap(q.Channel) {
 		q.overflow.PushBack(m)
 	} else {
@@ -57,14 +52,14 @@ func (q *Queue) Enqueue(m Message) {
 	}
 }
 
-func (q *Queue) Dequeue() Message {
+func (q *Queue) Dequeue() models.StoredMessage {
 	q.mu.Lock()
 	m := <-q.Channel
 	q.mu.Unlock()
 	return m
 }
 
-// After a sub is registered as a consumer we start a worker who will dispatch the queued messages automatically.
+// After a sub is registered as a consumer we start a ""worker"" who will dispatch the queued messages automatically.
 func (s *Queue) StartDispacher(conn net.Conn) {
 	for {
 		if len(s.Channel) > 0 {
@@ -78,4 +73,22 @@ func (s *Queue) StartDispacher(conn net.Conn) {
 			}
 		}
 	}
+}
+
+func (q *Queue) HandleAck(messageID uuid.UUID) error {
+	if _, exist := q.InFlight[messageID]; !exist {
+		return fmt.Errorf("ERROR: No message to ack with the provided id")
+	}
+	delete(q.InFlight, messageID)
+	return nil
+}
+
+func (q *Queue) HandleNack(messageID uuid.UUID) error {
+	m, exist := q.InFlight[messageID]
+	if !exist {
+		return fmt.Errorf("ERROR: No message to nack with the provided id")
+	}
+	q.Enqueue(m) // requeue the message
+	delete(q.InFlight, messageID)
+	return nil
 }
