@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/Max20050/go_message_broker/client"
 )
@@ -13,19 +12,6 @@ type Email struct {
 	From    string `json:"from"`
 	Subject string `json:"subject"`
 	Content string `json:"content"`
-}
-
-type Headers struct {
-	Method    string    `json:"method"` // Publish/Consume
-	Issuer    string    `json:"issuer"` //e.g: Backend
-	QueueName string    `json:"queuename"`
-	Context   string    `json:"context"`   // optional topic. e.g: Emails,messages
-	Timestamp time.Time `json:"timestamp"` // Time
-}
-
-type Message struct {
-	Head    Headers     `json:"headers"`
-	PayLoad interface{} `json:"payload"`
 }
 
 func main() {

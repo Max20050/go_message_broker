@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Message headers
@@ -25,7 +27,8 @@ type MessagePublisher struct {
 }
 
 type FullHeaders struct {
-	Method    string    `json:"method"` // Publish/Consume
+	MessageId uuid.UUID `json:"message_id"`
+	Method    string    `json:"method"`
 	Issuer    string    `json:"issuer"` //e.g: Backend
 	QueueName string    `json:"queuename"`
 	Context   string    `json:"context"`
@@ -36,6 +39,7 @@ type FullHeaders struct {
 type MessageConsumer struct {
 	Head    FullHeaders     `json:"headers"`
 	PayLoad json.RawMessage `json:"payload"`
+	Broker  *Broker         `json:"-"`
 }
 
 type Broker struct {
@@ -94,10 +98,10 @@ func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (ch
 	request := MessagePublisher{
 		Head: Headers{
 			Method:    "CONSUME",
-			Issuer:    "Backend",
+			Issuer:    ConsumerTag,
 			QueueName: "default",
 			Context:   "main",
-		}, // no payload as its not needed for consume request
+		}, // TODO: Add the config into the payload here
 	}
 
 	encoder := json.NewEncoder(b.connection)
@@ -121,10 +125,35 @@ func (b *Broker) Consume(QueueName string, ConsumerTag string, AutoAck bool) (ch
 				fmt.Printf("JSON was: %s\n", string(data))
 				continue
 			}
+			message.Broker = b
 			msg <- message
 		}
 	}()
 	return msg, nil
+}
+
+func (m *MessageConsumer) Ack() error {
+	request := MessagePublisher{
+		Head: Headers{
+			Method:    "ACK",
+			Issuer:    "Backend",
+			QueueName: "default",
+			Context:   "main",
+		}, // TODO: Add the consumertag in the payload for later use
+	}
+
+	messageID, err := GetBytes(m.Head.MessageId)
+	if err != nil {
+		panic(err.Error())
+	}
+	request.PayLoad = json.RawMessage(messageID)
+	encoder := json.NewEncoder(m.Broker.connection)
+	err = encoder.Encode(request)
+	if err != nil {
+		fmt.Println("Send error:", err)
+		return nil
+	}
+	return nil
 }
 
 func GetBytes(key any) ([]byte, error) {

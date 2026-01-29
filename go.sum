@@ -2,5 +2,7 @@ github.com/Max20050/go_message_broker/client v0.0.0-20260126010342-e7fd72ae5ee5 
 github.com/Max20050/go_message_broker/client v0.0.0-20260126010342-e7fd72ae5ee5/go.mod h1:Tn4zYFavXb9dw7ZiDuABsPBoqVF9iLDMyx82vVuA7E4=
 github.com/Max20050/go_message_broker/client v0.0.0-20260126054137-ef784f6857b3 h1:W+JchBo2t1o/7iNLAFIGFBKqjiQ0huYBg4aDbCa4hUQ=
 github.com/Max20050/go_message_broker/client v0.0.0-20260126054137-ef784f6857b3/go.mod h1:Tn4zYFavXb9dw7ZiDuABsPBoqVF9iLDMyx82vVuA7E4=
+github.com/Max20050/go_message_broker/client v0.0.0-20260128071208-14c6de9d1d3c h1:BY4JtSXv6UPIJpv4YjZW9zjbMtF6Cm/L9kDsdj7cMXo=
+github.com/Max20050/go_message_broker/client v0.0.0-20260128071208-14c6de9d1d3c/go.mod h1:Tn4zYFavXb9dw7ZiDuABsPBoqVF9iLDMyx82vVuA7E4=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=

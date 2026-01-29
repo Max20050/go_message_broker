@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Max20050/go_message_broker/client"
@@ -21,11 +22,11 @@ func main() {
 	}
 	counter := 0
 	for {
-		counter++
+		counter = counter + 1
 		em := map[string]interface{}{
 			"from":    "maxmimoabella12@gmail.com",
 			"subject": "Example Email",
-			"content": ("This is the email number: " + string(rune(counter))),
+			"content": fmt.Sprintf("This is the email number: %d", counter),
 		}
 		time.Sleep(time.Second * 5) // Wait 5 and send message to queue
 		broker.Publish(context.Background(), "Backend 1", "Emails", "default", em)
