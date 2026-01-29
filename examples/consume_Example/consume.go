@@ -35,5 +35,6 @@ func main() {
 			continue
 		}
 		fmt.Println(decoded)
+		msg.Ack()
 	}
 }

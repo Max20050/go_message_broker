@@ -9,6 +9,7 @@ import (
 
 	"github.com/Max20050/go_message_broker/models"
 	"github.com/Max20050/go_message_broker/queues"
+	"github.com/google/uuid"
 )
 
 type Exchange struct {
@@ -82,9 +83,27 @@ func (s *Server) handleConnection(conn net.Conn) {
 			if !exists {
 				// Return error
 			} else {
-				q.StartDispacher(conn)
+				go q.StartDispacher(conn)
 			}
 			fmt.Println("Message Consumed")
+		}
+		if msg.Head.Method == "ACK" {
+			fmt.Println("ACK request")
+			q, exists := s.Queues[msg.Head.QueueName]
+			if !exists {
+				// Return error
+			}
+
+			var msgID uuid.UUID
+			err := msgID.UnmarshalText(msg.PayLoad)
+			if err != nil {
+				panic(err.Error())
+			}
+			fmt.Println(msgID)
+			err = q.HandleAck(msgID)
+			if err != nil {
+				panic(err.Error())
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {

@@ -146,7 +146,7 @@ func (m *MessageConsumer) Ack() error {
 	if err != nil {
 		panic(err.Error())
 	}
-	request.PayLoad = json.RawMessage(messageID)
+	request.PayLoad = json.RawMessage(messageID) // we send the message id in the payload
 	encoder := json.NewEncoder(m.Broker.connection)
 	err = encoder.Encode(request)
 	if err != nil {

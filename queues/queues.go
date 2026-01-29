@@ -32,6 +32,7 @@ func CreateQueue(name string, queueSize int) Queue {
 		Channel:  make(chan models.StoredMessage, queueSize),
 		overflow: list.New(),
 		mu:       new(sync.Mutex),
+		InFlight: make(map[uuid.UUID]models.StoredMessage),
 	}
 }
 
@@ -65,6 +66,7 @@ func (s *Queue) StartDispacher(conn net.Conn) {
 		if len(s.Channel) > 0 {
 			msg := s.Dequeue()
 			fmt.Println(msg)
+			s.InFlight[msg.Head.MessageId] = msg
 			encoder := json.NewEncoder(conn)
 			err := encoder.Encode(msg)
 			if err != nil {
@@ -80,7 +82,12 @@ func (q *Queue) HandleAck(messageID uuid.UUID) error {
 		return fmt.Errorf("ERROR: No message to ack with the provided id")
 	}
 	delete(q.InFlight, messageID)
-	return nil
+	_, exist := q.InFlight[messageID]
+	if !exist {
+		fmt.Println("MESSAGE ACKED SUCCESSFULLY")
+		return nil
+	}
+	return nil // !ADD ERROR
 }
 
 func (q *Queue) HandleNack(messageID uuid.UUID) error {

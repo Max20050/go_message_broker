@@ -4,5 +4,7 @@ github.com/Max20050/go_message_broker/client v0.0.0-20260126054137-ef784f6857b3 
 github.com/Max20050/go_message_broker/client v0.0.0-20260126054137-ef784f6857b3/go.mod h1:Tn4zYFavXb9dw7ZiDuABsPBoqVF9iLDMyx82vVuA7E4=
 github.com/Max20050/go_message_broker/client v0.0.0-20260128071208-14c6de9d1d3c h1:BY4JtSXv6UPIJpv4YjZW9zjbMtF6Cm/L9kDsdj7cMXo=
 github.com/Max20050/go_message_broker/client v0.0.0-20260128071208-14c6de9d1d3c/go.mod h1:Tn4zYFavXb9dw7ZiDuABsPBoqVF9iLDMyx82vVuA7E4=
+github.com/Max20050/go_message_broker/client v0.0.0-20260129075304-8e04e187b06c h1:PIfl5Hcut25UR71Wy4kVQvG6311+Q7yOsJIdk4xwjyo=
+github.com/Max20050/go_message_broker/client v0.0.0-20260129075304-8e04e187b06c/go.mod h1:Cv8T9VTs4p0gLiljCYF8CqyTlVQcwjXTKEtgoFfHf8g=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
