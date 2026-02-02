@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
@@ -66,6 +67,13 @@ func (q *Queue) Dequeue() models.StoredMessage {
 func (s *Queue) StartDispacher(conn net.Conn, consumerTag string) {
 	for {
 		if len(s.Channel) > 0 {
+
+			err := ConsumerHearthBeat(conn)
+
+			if err != nil {
+				return
+			}
+
 			msg := s.Dequeue()
 			fmt.Println(msg)
 
@@ -74,7 +82,7 @@ func (s *Queue) StartDispacher(conn net.Conn, consumerTag string) {
 			}
 
 			encoder := json.NewEncoder(conn)
-			err := encoder.Encode(msg)
+			err = encoder.Encode(msg)
 			if err != nil {
 				fmt.Println("Send error:", err)
 				return
@@ -103,5 +111,15 @@ func (q *Queue) HandleNack(messageID uuid.UUID) error {
 	}
 	q.Enqueue(m) // requeue the message
 	delete(q.InFlight, messageID)
+	return nil
+}
+
+func ConsumerHearthBeat(conn net.Conn) error {
+	buffer := make([]byte, 1024)
+	_, err := conn.Read(buffer)
+	if err == io.EOF {
+		fmt.Printf("Connection closed by remote peer: %s\n", conn.RemoteAddr())
+		return err // Exit the handler goroutine
+	}
 	return nil
 }

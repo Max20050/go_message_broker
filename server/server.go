@@ -12,9 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type Exchange struct {
-}
-
 type Server struct {
 	Port     string // Running server port
 	Listener net.Listener
