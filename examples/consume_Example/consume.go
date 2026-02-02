@@ -8,7 +8,7 @@ import (
 	"github.com/Max20050/go_message_broker/client"
 )
 
-type Email struct {
+type Email struct { // Example structure
 	From    string `json:"from"`
 	Subject string `json:"subject"`
 	Content string `json:"content"`
@@ -21,7 +21,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	msgs, err := broker.Consume("default", "Email reciever", true)
+	msgs, err := broker.Consume("default", "Email reciever", false)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -35,6 +35,6 @@ func main() {
 			continue
 		}
 		fmt.Println(decoded)
-		msg.Ack()
+		msg.Ack() // Manual ack
 	}
 }

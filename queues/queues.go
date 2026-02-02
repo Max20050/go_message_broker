@@ -16,23 +16,25 @@ type Config struct {
 }
 
 type Queue struct { // Data structure for in-memory messages
-	Id       uuid.UUID
-	Name     string
-	mu       *sync.Mutex                        // lock for race conditions
-	Channel  chan models.StoredMessage          // Primary queue stream limited size
-	overflow *list.List                         // overflow unlimited size but less performative
-	InFlight map[uuid.UUID]models.StoredMessage // in-flight messages waiting to be acked or nacked and requeued
+	Id        uuid.UUID
+	Name      string
+	mu        *sync.Mutex                        // lock for race conditions
+	Channel   chan models.StoredMessage          // Primary queue stream limited size
+	overflow  *list.List                         // overflow unlimited size but less performative
+	InFlight  map[uuid.UUID]models.StoredMessage // in-flight messages waiting to be acked or nacked and requeued
+	Consumers map[string]models.Consumer         // We store the consumer information
 }
 
 func CreateQueue(name string, queueSize int) Queue {
 	id := uuid.New()
 	return Queue{
-		Id:       id,
-		Name:     name,
-		Channel:  make(chan models.StoredMessage, queueSize),
-		overflow: list.New(),
-		mu:       new(sync.Mutex),
-		InFlight: make(map[uuid.UUID]models.StoredMessage),
+		Id:        id,
+		Name:      name,
+		Channel:   make(chan models.StoredMessage, queueSize),
+		overflow:  list.New(),
+		mu:        new(sync.Mutex),
+		InFlight:  make(map[uuid.UUID]models.StoredMessage),
+		Consumers: make(map[string]models.Consumer),
 	}
 }
 
@@ -61,12 +63,16 @@ func (q *Queue) Dequeue() models.StoredMessage {
 }
 
 // After a sub is registered as a consumer we start a ""worker"" who will dispatch the queued messages automatically.
-func (s *Queue) StartDispacher(conn net.Conn) {
+func (s *Queue) StartDispacher(conn net.Conn, consumerTag string) {
 	for {
 		if len(s.Channel) > 0 {
 			msg := s.Dequeue()
 			fmt.Println(msg)
-			s.InFlight[msg.Head.MessageId] = msg
+
+			if !s.Consumers[consumerTag].AutoAck {
+				s.InFlight[msg.Head.MessageId] = msg
+			}
+
 			encoder := json.NewEncoder(conn)
 			err := encoder.Encode(msg)
 			if err != nil {

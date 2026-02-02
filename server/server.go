@@ -83,7 +83,20 @@ func (s *Server) handleConnection(conn net.Conn) {
 			if !exists {
 				// Return error
 			} else {
-				go q.StartDispacher(conn)
+
+				var ConsumerPayload models.ConsumerPayload
+
+				if err := json.Unmarshal(msg.PayLoad, &ConsumerPayload); err != nil {
+					panic(err.Error())
+				}
+				consumer := models.Consumer{
+					QueueName:   msg.Head.QueueName,
+					ConsumerTag: msg.Head.Issuer,
+					AutoAck:     ConsumerPayload.AutoAck,
+				}
+				q.Consumers[consumer.ConsumerTag] = consumer
+
+				go q.StartDispacher(conn, consumer.ConsumerTag)
 			}
 			fmt.Println("Message Consumed")
 		}
@@ -101,6 +114,24 @@ func (s *Server) handleConnection(conn net.Conn) {
 			}
 			fmt.Println(msgID)
 			err = q.HandleAck(msgID)
+			if err != nil {
+				panic(err.Error())
+			}
+		}
+		if msg.Head.Method == "NACK" {
+			fmt.Println("ACK request")
+			q, exists := s.Queues[msg.Head.QueueName]
+			if !exists {
+				// Return error
+			}
+
+			var msgID uuid.UUID
+			err := msgID.UnmarshalText(msg.PayLoad)
+			if err != nil {
+				panic(err.Error())
+			}
+			fmt.Println(msgID)
+			err = q.HandleNack(msgID)
 			if err != nil {
 				panic(err.Error())
 			}
