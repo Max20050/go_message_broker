@@ -1,4 +1,10 @@
 package exchange
 
-type Exchange struct {
+type Exchange interface {
 }
+
+type DirectExchange struct{}
+
+type FanoutExchange struct{}
+
+type TopicExchange struct{}
