@@ -13,20 +13,23 @@ import (
 )
 
 type Config struct {
-	data_persist bool // TODO
+	DataPersist bool // TODO
 }
 
 type Queue struct { // Data structure for in-memory messages
 	Id        uuid.UUID
 	Name      string
-	mu        *sync.Mutex                        // lock for race conditions
-	Channel   chan models.StoredMessage          // Primary queue stream limited size
-	overflow  *list.List                         // overflow unlimited size but less performative
-	InFlight  map[uuid.UUID]models.StoredMessage // in-flight messages waiting to be acked or nacked and requeued
-	Consumers map[string]models.Consumer         // We store the consumer information
+	mu        *sync.Mutex
+	Channel   chan models.StoredMessage           // Primary queue stream (limited size)
+	overflow  *list.List                          // Overflow (unlimited size but less performant)
+	InFlight  map[uuid.UUID]models.StoredMessage  // In-flight messages waiting to be acked/nacked
+	Consumers map[string]models.Consumer          // Registered consumers
 }
 
 func CreateQueue(name string, queueSize int) Queue {
+	if queueSize <= 0 {
+		queueSize = 1000
+	}
 	id := uuid.New()
 	return Queue{
 		Id:        id,
@@ -63,22 +66,25 @@ func (q *Queue) Dequeue() models.StoredMessage {
 	return m
 }
 
-// After a sub is registered as a consumer we start a ""worker"" who will dispatch the queued messages automatically.
-func (s *Queue) StartDispacher(conn net.Conn, consumerTag string) {
+// StartDispatcher dispatches queued messages to a consumer connection.
+func (q *Queue) StartDispatcher(conn net.Conn, consumerTag string) {
 	for {
-		if len(s.Channel) > 0 {
-
-			err := ConsumerHearthBeat(conn)
-
+		if len(q.Channel) > 0 {
+			err := ConsumerHeartBeat(conn)
 			if err != nil {
 				return
 			}
 
-			msg := s.Dequeue()
+			msg := q.Dequeue()
 			fmt.Println(msg)
 
-			if !s.Consumers[consumerTag].AutoAck {
-				s.InFlight[msg.Head.MessageId] = msg
+			consumer, exists := q.Consumers[consumerTag]
+			if !exists {
+				return // consumer was removed
+			}
+
+			if !consumer.AutoAck {
+				q.InFlight[msg.Head.MessageId] = msg
 			}
 
 			encoder := json.NewEncoder(conn)
@@ -114,7 +120,7 @@ func (q *Queue) HandleNack(messageID uuid.UUID) error {
 	return nil
 }
 
-func ConsumerHearthBeat(conn net.Conn) error {
+func ConsumerHeartBeat(conn net.Conn) error {
 	buffer := make([]byte, 1024)
 	_, err := conn.Read(buffer)
 	if err == io.EOF {

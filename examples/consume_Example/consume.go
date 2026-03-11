@@ -4,32 +4,39 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/Max20050/go_message_broker/client"
 )
 
-type Email struct { // Example structure
+type Email struct {
 	From    string `json:"from"`
 	Subject string `json:"subject"`
 	Content string `json:"content"`
 }
 
 func main() {
-
 	broker, err := client.ConnectBroker("localhost", "8080")
 	if err != nil {
 		panic(err.Error())
 	}
 
-	msgs, err := broker.Consume("default", "Email reciever", false)
+	ch := broker.OpenChannel()
+
+	// Declare the queue we want to consume from.
+	if err := ch.DeclareQueue("emails", 1000); err != nil {
+		panic(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	msgs, err := ch.Consume("emails", "Email receiver", false)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	for {
+	for msg := range msgs {
 		var decoded Email
-		msg := <-msgs
-		fmt.Println("Message headers: ", msg.Head)
+		fmt.Println("Message headers:", msg.Head)
 		if err := json.Unmarshal(msg.PayLoad, &decoded); err != nil {
 			log.Printf("❌ Error unmarshalling message: %v", err)
 			continue
