@@ -56,20 +56,23 @@ type MessageConsumer struct {
 // Broker connection
 // -----------------------------------------------------------------------
 
-type Broker struct {
-	port       string
-	address    string
-	connection net.Conn
-	mu         sync.Mutex // protects writes
-	nextChanID atomic.Int32
-}
-
-// authResponse is used to decode the server's reply to the AUTH frame.
-type authResponse struct {
+// serverResponse is the JSON frame sent back by the broker for control-plane ops.
+type serverResponse struct {
 	Status  string `json:"status"`
 	Method  string `json:"method"`
 	Message string `json:"message"`
 }
+
+type Broker struct {
+	port       string
+	address    string
+	connection net.Conn
+	reader     *bufio.Reader  // shared reader – all reads go through this
+	mu         sync.Mutex     // protects writes AND reads (serialises request-response pairs)
+	nextChanID atomic.Int32
+}
+
+// (authResponse is now unified as serverResponse above)
 
 func ConnectBroker(address, port, username, password string) (*Broker, error) {
 	conn, err := net.Dial("tcp", address+":"+port)
@@ -100,14 +103,15 @@ func ConnectBroker(address, port, username, password string) (*Broker, error) {
 	}
 
 	// ---- Wait for AUTH response ----
-	reader := bufio.NewReader(conn)
-	respData, err := reader.ReadBytes('\n')
+	// Create the shared reader once and keep it for the lifetime of the connection.
+	sharedReader := bufio.NewReader(conn)
+	respData, err := sharedReader.ReadBytes('\n')
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to read auth response: %w", err)
 	}
 
-	var resp authResponse
+	var resp serverResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("invalid auth response: %w", err)
@@ -122,6 +126,7 @@ func ConnectBroker(address, port, username, password string) (*Broker, error) {
 		port:       port,
 		address:    address,
 		connection: conn,
+		reader:     sharedReader,
 	}
 	b.nextChanID.Store(1)
 	return b, nil
@@ -224,15 +229,22 @@ func (ch *Channel) Consume(queueName, consumerTag string, autoAck bool) (<-chan 
 	}
 
 	out := make(chan MessageConsumer)
-	reader := bufio.NewReader(ch.broker.connection)
 	go func() {
 		defer close(out)
 		for {
-			data, err := reader.ReadBytes('\n')
+			// Use the shared reader so we don't lose buffered data.
+			data, err := ch.broker.reader.ReadBytes('\n')
 			if err != nil {
 				fmt.Println("Connection closed by server")
 				return
 			}
+
+			// Skip server control-plane responses (they have a "status" field).
+			var probe serverResponse
+			if json.Unmarshal(data, &probe) == nil && probe.Status != "" {
+				continue // not a delivered message, skip
+			}
+
 			var message MessageConsumer
 			if err := json.Unmarshal(data, &message); err != nil {
 				fmt.Printf("Error unmarshalling JSON: %v\n", err)
@@ -247,6 +259,8 @@ func (ch *Channel) Consume(queueName, consumerTag string, autoAck bool) (<-chan 
 }
 
 // send is the internal helper to write a framed message to the broker.
+// For control-plane operations (DECLARE_*, BIND_*) it also reads the server
+// response so those frames don't leak into the consumer stream.
 func (ch *Channel) send(method, exchangeName, routingKey string, payload json.RawMessage) error {
 	msg := MessagePublisher{
 		Head: Headers{
@@ -266,10 +280,41 @@ func (ch *Channel) send(method, exchangeName, routingKey string, payload json.Ra
 	}
 	fullBytes = append(fullBytes, '\n')
 
+	// Hold the lock for the entire write+read so no other goroutine
+	// can interleave and steal our response.
 	ch.broker.mu.Lock()
+	defer ch.broker.mu.Unlock()
+
 	_, err = ch.broker.connection.Write(fullBytes)
-	ch.broker.mu.Unlock()
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Control-plane methods get a response from the server – read it.
+	if isControlPlane(method) {
+		respData, err := ch.broker.reader.ReadBytes('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read server response: %w", err)
+		}
+		var resp serverResponse
+		if err := json.Unmarshal(respData, &resp); err != nil {
+			return fmt.Errorf("invalid server response: %w", err)
+		}
+		if resp.Status == "error" {
+			return fmt.Errorf("server error [%s]: %s", resp.Method, resp.Message)
+		}
+	}
+
+	return nil
+}
+
+// isControlPlane returns true for methods where the server sends a response.
+func isControlPlane(method string) bool {
+	switch method {
+	case "DECLARE_QUEUE", "DECLARE_EXCHANGE", "BIND_QUEUE":
+		return true
+	}
+	return false
 }
 
 // -----------------------------------------------------------------------

@@ -1,4 +1,6 @@
 github.com/Max20050/go_message_broker/client v0.0.0-20260311031431-a4a7a8abb3f1 h1:6wks2Nrjx3XfT0Ntd3FAH1GmTtg9RNksFcvE8WgaOOw=
 github.com/Max20050/go_message_broker/client v0.0.0-20260311031431-a4a7a8abb3f1/go.mod h1:Cv8T9VTs4p0gLiljCYF8CqyTlVQcwjXTKEtgoFfHf8g=
+github.com/Max20050/go_message_broker/client v0.0.0-20260311214403-f5478807a592 h1:CLZ+20Hp/W3foAh5Tdl2qexvuT1QOn7Y1qh4q0Futsw=
+github.com/Max20050/go_message_broker/client v0.0.0-20260311214403-f5478807a592/go.mod h1:Cv8T9VTs4p0gLiljCYF8CqyTlVQcwjXTKEtgoFfHf8g=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
