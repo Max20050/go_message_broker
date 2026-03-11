@@ -12,7 +12,7 @@ import (
 // Messages with routing key "payments.due" go to the "billing" queue.
 // Messages with routing key "payments.*" (wildcard) go to the "audit" queue.
 func main() {
-	broker, err := client.ConnectBroker("localhost", "8080")
+	broker, err := client.ConnectBroker("localhost", "8080", "root", "root")
 	if err != nil {
 		panic(err)
 	}

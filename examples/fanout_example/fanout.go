@@ -13,7 +13,7 @@ import (
 // Two queues ("log_console" and "log_file") are bound to it.
 // Every message is delivered to BOTH queues.
 func main() {
-	broker, err := client.ConnectBroker("localhost", "8080")
+	broker, err := client.ConnectBroker("localhost", "8080", "root", "root")
 	if err != nil {
 		panic(err)
 	}

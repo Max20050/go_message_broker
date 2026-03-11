@@ -51,15 +51,25 @@ func (s *Server) Accept() error {
 	}
 }
 
+// hardcoded credentials (temporary)
+var validUsers = map[string]string{
+	"root": "root",
+}
+
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	// Each connection gets its own channel manager.
-	chManager := channel.NewManager(conn)
-	defer chManager.CloseAll()
-
 	scanner := bufio.NewScanner(conn)
 	fmt.Println("New connection:", conn.RemoteAddr().String())
+
+	// ---- Authentication handshake ----
+	if !s.authenticate(conn, scanner) {
+		return // connection already closed with error
+	}
+
+	// ---- Authenticated – proceed normally ----
+	chManager := channel.NewManager(conn)
+	defer chManager.CloseAll()
 
 	for scanner.Scan() {
 		jsonData := scanner.Bytes()
@@ -102,6 +112,47 @@ func (s *Server) handleConnection(conn net.Conn) {
 	if err := scanner.Err(); err != nil {
 		fmt.Printf("Error reading from connection: %v\n", err)
 	}
+}
+
+// authenticate reads the first frame from the connection and validates
+// the credentials. Returns true if the client is authenticated.
+func (s *Server) authenticate(conn net.Conn, scanner *bufio.Scanner) bool {
+	if !scanner.Scan() {
+		fmt.Printf("Auth failed: connection closed before auth from %s\n", conn.RemoteAddr())
+		return false
+	}
+
+	jsonData := scanner.Bytes()
+	var msg models.RecievedMessage
+	if err := json.Unmarshal(jsonData, &msg); err != nil {
+		sendError(conn, "AUTH", fmt.Sprintf("invalid auth frame: %v", err))
+		fmt.Printf("Auth failed: bad JSON from %s\n", conn.RemoteAddr())
+		return false
+	}
+
+	if msg.Head.Method != "AUTH" {
+		sendError(conn, "AUTH", "first message must be AUTH")
+		fmt.Printf("Auth failed: expected AUTH, got %q from %s\n", msg.Head.Method, conn.RemoteAddr())
+		return false
+	}
+
+	var creds models.AuthPayload
+	if err := json.Unmarshal(msg.PayLoad, &creds); err != nil {
+		sendError(conn, "AUTH", fmt.Sprintf("bad auth payload: %v", err))
+		fmt.Printf("Auth failed: bad payload from %s\n", conn.RemoteAddr())
+		return false
+	}
+
+	expectedPassword, userExists := validUsers[creds.Username]
+	if !userExists || expectedPassword != creds.Password {
+		sendError(conn, "AUTH", "invalid credentials")
+		fmt.Printf("Auth failed: invalid credentials (user=%q) from %s\n", creds.Username, conn.RemoteAddr())
+		return false
+	}
+
+	sendOK(conn, "AUTH", fmt.Sprintf("welcome %s", creds.Username))
+	fmt.Printf("Auth successful: user=%q from %s\n", creds.Username, conn.RemoteAddr())
+	return true
 }
 
 // ---------------------------------------------------------------------------

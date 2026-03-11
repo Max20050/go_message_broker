@@ -64,11 +64,60 @@ type Broker struct {
 	nextChanID atomic.Int32
 }
 
-func ConnectBroker(address string, port string) (*Broker, error) {
+// authResponse is used to decode the server's reply to the AUTH frame.
+type authResponse struct {
+	Status  string `json:"status"`
+	Method  string `json:"method"`
+	Message string `json:"message"`
+}
+
+func ConnectBroker(address, port, username, password string) (*Broker, error) {
 	conn, err := net.Dial("tcp", address+":"+port)
 	if err != nil {
 		return nil, err
 	}
+
+	// ---- Send AUTH handshake ----
+	payload, _ := json.Marshal(map[string]string{
+		"username": username,
+		"password": password,
+	})
+
+	authMsg := MessagePublisher{
+		Head: Headers{
+			Method:    "AUTH",
+			ChannelID: 0,
+			Timestamp: time.Now(),
+		},
+		PayLoad: json.RawMessage(payload),
+	}
+
+	authBytes, _ := json.Marshal(authMsg)
+	authBytes = append(authBytes, '\n')
+	if _, err := conn.Write(authBytes); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to send auth: %w", err)
+	}
+
+	// ---- Wait for AUTH response ----
+	reader := bufio.NewReader(conn)
+	respData, err := reader.ReadBytes('\n')
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to read auth response: %w", err)
+	}
+
+	var resp authResponse
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("invalid auth response: %w", err)
+	}
+
+	if resp.Status != "ok" {
+		conn.Close()
+		return nil, fmt.Errorf("authentication failed: %s", resp.Message)
+	}
+
 	b := &Broker{
 		port:       port,
 		address:    address,

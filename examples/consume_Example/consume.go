@@ -16,7 +16,7 @@ type Email struct {
 }
 
 func main() {
-	broker, err := client.ConnectBroker("localhost", "8080")
+	broker, err := client.ConnectBroker("localhost", "8080", "root", "root")
 	if err != nil {
 		panic(err.Error())
 	}

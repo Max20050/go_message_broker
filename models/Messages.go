@@ -82,3 +82,9 @@ type ConsumerPayload struct {
 	AutoAck   bool   `json:"autoack"`
 	QueueName string `json:"queue_name"`
 }
+
+// AuthPayload is sent by the client as the first message to authenticate.
+type AuthPayload struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}

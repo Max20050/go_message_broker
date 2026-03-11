@@ -3,5 +3,4 @@
 [ ] - Error formating using error codes and proper error handling from both sides cli/server. 
 [ ] - Create user interface and metrics tools. 
 [ ] - Explore ways to improve the model 
-[ ] - Add Fanout Exchange for consumers
 [ ] - Test using another pc in other network
