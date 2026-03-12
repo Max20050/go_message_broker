@@ -4,9 +4,9 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/Max20050/go_message_broker/models"
 	"github.com/google/uuid"
@@ -59,73 +59,69 @@ func (q *Queue) Enqueue(m models.StoredMessage) {
 	}
 }
 
-func (q *Queue) Dequeue() models.StoredMessage {
-	q.mu.Lock()
-	m := <-q.Channel
-	q.mu.Unlock()
-	return m
+// Dequeue blocks until a message is available and returns it.
+func (q *Queue) Dequeue() (models.StoredMessage, bool) {
+	msg, ok := <-q.Channel
+	return msg, ok
 }
 
 // StartDispatcher dispatches queued messages to a consumer connection.
+// It blocks on the channel receive — no busy-loop, no heartbeat read.
 func (q *Queue) StartDispatcher(conn net.Conn, consumerTag string) {
-	for {
-		if len(q.Channel) > 0 {
-			err := ConsumerHeartBeat(conn)
-			if err != nil {
-				return
-			}
+	encoder := json.NewEncoder(conn)
 
-			msg := q.Dequeue()
-			fmt.Println(msg)
+	for msg := range q.Channel {
+		fmt.Printf("[dispatcher] delivering msg %s to consumer %q\n", msg.Head.MessageId, consumerTag)
 
-			consumer, exists := q.Consumers[consumerTag]
-			if !exists {
-				return // consumer was removed
-			}
-
-			if !consumer.AutoAck {
-				q.InFlight[msg.Head.MessageId] = msg
-			}
-
-			encoder := json.NewEncoder(conn)
-			err = encoder.Encode(msg)
-			if err != nil {
-				fmt.Println("Send error:", err)
-				return
-			}
+		consumer, exists := q.Consumers[consumerTag]
+		if !exists {
+			// Consumer was removed — requeue the message and stop.
+			q.Enqueue(msg)
+			fmt.Printf("[dispatcher] consumer %q gone, stopping\n", consumerTag)
+			return
 		}
+
+		if !consumer.AutoAck {
+			q.mu.Lock()
+			q.InFlight[msg.Head.MessageId] = msg
+			q.mu.Unlock()
+		}
+
+		// Use a write deadline to detect dead connections instead of
+		// a blocking conn.Read() heartbeat (which caused a deadlock).
+		conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if err := encoder.Encode(msg); err != nil {
+			fmt.Println("[dispatcher] send error:", err)
+			// Requeue the message so it isn't lost.
+			q.Enqueue(msg)
+			return
+		}
+		conn.SetWriteDeadline(time.Time{}) // clear deadline
 	}
 }
 
 func (q *Queue) HandleAck(messageID uuid.UUID) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	if _, exist := q.InFlight[messageID]; !exist {
 		return fmt.Errorf("ERROR: No message to ack with the provided id")
 	}
 	delete(q.InFlight, messageID)
-	_, exist := q.InFlight[messageID]
-	if !exist {
-		fmt.Println("MESSAGE ACKED SUCCESSFULLY")
-		return nil
-	}
-	return nil // !ADD ERROR
-}
-
-func (q *Queue) HandleNack(messageID uuid.UUID) error {
-	m, exist := q.InFlight[messageID]
-	if !exist {
-		return fmt.Errorf("ERROR: No message to nack with the provided id")
-	}
-	q.Enqueue(m) // requeue the message
-	delete(q.InFlight, messageID)
+	fmt.Println("MESSAGE ACKED SUCCESSFULLY")
 	return nil
 }
 
-func ConsumerHeartBeat(conn net.Conn) error {
-	buffer := make([]byte, 1024)
-	_, err := conn.Read(buffer)
-	if err == io.EOF {
-		fmt.Printf("Connection closed by remote peer: %s\n", conn.RemoteAddr())
-		return err // Exit the handler goroutine
+func (q *Queue) HandleNack(messageID uuid.UUID) error {
+	q.mu.Lock()
+	msg, exist := q.InFlight[messageID]
+	if !exist {
+		q.mu.Unlock()
+		return fmt.Errorf("ERROR: No message to nack with the provided id")
 	}
+	delete(q.InFlight, messageID)
+	q.mu.Unlock()
+
+	q.Enqueue(msg) // requeue the message
 	return nil
 }
