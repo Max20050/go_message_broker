@@ -23,6 +23,21 @@ type Exchange interface {
 	Unbind(routingKey string, queueName string)
 	// Route delivers a message to matching bound queues.
 	Route(routingKey string, msg models.StoredMessage) error
+	// Bindings returns a map of routing keys to bound queue names.
+	Bindings() map[string][]string
+}
+
+// ExchangeInfo holds metadata about an exchange for the admin panel.
+type ExchangeInfo struct {
+	Name     string        `json:"name"`
+	Type     string        `json:"type"`
+	Bindings []BindingInfo `json:"bindings"`
+}
+
+// BindingInfo describes a single binding in an exchange.
+type BindingInfo struct {
+	RoutingKey string `json:"routing_key"`
+	QueueName  string `json:"queue_name"`
 }
 
 // -----------------------------------------------------------------------
@@ -77,6 +92,30 @@ func (r *Registry) Get(name string) (Exchange, bool) {
 	return ex, ok
 }
 
+// ListAll returns metadata for every registered exchange.
+func (r *Registry) ListAll() []ExchangeInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]ExchangeInfo, 0, len(r.exchanges))
+	for _, ex := range r.exchanges {
+		info := ExchangeInfo{
+			Name: ex.Name(),
+			Type: ex.Type(),
+		}
+		for rk, queueNames := range ex.Bindings() {
+			for _, qn := range queueNames {
+				info.Bindings = append(info.Bindings, BindingInfo{
+					RoutingKey: rk,
+					QueueName:  qn,
+				})
+			}
+		}
+		result = append(result, info)
+	}
+	return result
+}
+
 // -----------------------------------------------------------------------
 // Direct Exchange
 // -----------------------------------------------------------------------
@@ -122,6 +161,18 @@ func (d *DirectExchange) Unbind(routingKey string, queueName string) {
 			return
 		}
 	}
+}
+
+func (d *DirectExchange) Bindings() map[string][]string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	result := make(map[string][]string)
+	for rk, qs := range d.bindings {
+		for _, q := range qs {
+			result[rk] = append(result[rk], q.Name)
+		}
+	}
+	return result
 }
 
 func (d *DirectExchange) Route(routingKey string, msg models.StoredMessage) error {
@@ -184,6 +235,16 @@ func (f *FanoutExchange) Unbind(_ string, queueName string) {
 			return
 		}
 	}
+}
+
+func (f *FanoutExchange) Bindings() map[string][]string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	result := make(map[string][]string)
+	for _, q := range f.queues {
+		result[""] = append(result[""], q.Name)
+	}
+	return result
 }
 
 func (f *FanoutExchange) Route(_ string, msg models.StoredMessage) error {
@@ -251,6 +312,18 @@ func (t *TopicExchange) Unbind(routingKey string, queueName string) {
 			return
 		}
 	}
+}
+
+func (t *TopicExchange) Bindings() map[string][]string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	result := make(map[string][]string)
+	for rk, qs := range t.bindings {
+		for _, q := range qs {
+			result[rk] = append(result[rk], q.Name)
+		}
+	}
+	return result
 }
 
 func (t *TopicExchange) Route(routingKey string, msg models.StoredMessage) error {

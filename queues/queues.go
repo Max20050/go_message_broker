@@ -125,3 +125,77 @@ func (q *Queue) HandleNack(messageID uuid.UUID) error {
 	q.Enqueue(msg) // requeue the message
 	return nil
 }
+
+// ListInFlight returns a copy of messages currently in-flight (awaiting ACK).
+func (q *Queue) ListInFlight() []models.StoredMessage {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	msgs := make([]models.StoredMessage, 0, len(q.InFlight))
+	for _, m := range q.InFlight {
+		msgs = append(msgs, m)
+	}
+	return msgs
+}
+
+// PeekMessages returns a snapshot of both buffered (queued) and in-flight messages.
+// Buffered messages are drained and immediately re-enqueued so nothing is lost.
+func (q *Queue) PeekMessages() (buffered []models.StoredMessage, inflight []models.StoredMessage) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// Snapshot in-flight
+	inflight = make([]models.StoredMessage, 0, len(q.InFlight))
+	for _, m := range q.InFlight {
+		inflight = append(inflight, m)
+	}
+
+	// Drain the channel buffer to peek, then put them all back
+	n := len(q.Channel)
+	buffered = make([]models.StoredMessage, 0, n)
+	for i := 0; i < n; i++ {
+		select {
+		case msg := <-q.Channel:
+			buffered = append(buffered, msg)
+		default:
+			break
+		}
+	}
+	// Re-enqueue all drained messages (same order)
+	for _, msg := range buffered {
+		q.Channel <- msg
+	}
+
+	return buffered, inflight
+}
+
+// RemoveFromBuffer removes a single message from the channel buffer by its ID.
+// It drains the channel, skips the target, and re-enqueues the rest.
+// Returns true if the message was found and removed.
+func (q *Queue) RemoveFromBuffer(messageID uuid.UUID) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	n := len(q.Channel)
+	found := false
+	kept := make([]models.StoredMessage, 0, n)
+
+	for i := 0; i < n; i++ {
+		select {
+		case msg := <-q.Channel:
+			if !found && msg.Head.MessageId == messageID {
+				found = true // drop this message
+				fmt.Printf("MESSAGE REMOVED FROM BUFFER: %s\n", messageID)
+			} else {
+				kept = append(kept, msg)
+			}
+		default:
+		}
+	}
+
+	// Re-enqueue the remaining messages
+	for _, msg := range kept {
+		q.Channel <- msg
+	}
+
+	return found
+}

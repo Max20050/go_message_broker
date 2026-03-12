@@ -42,6 +42,7 @@ func main() {
 			continue
 		}
 		fmt.Println(decoded)
+		time.Sleep(1 * time.Second)
 		msg.Ack() // Manual ack
 	}
 }

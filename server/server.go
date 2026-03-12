@@ -39,6 +39,11 @@ func CreteTcpServer(port string) (Server, error) {
 	}, nil
 }
 
+// GetMu returns a pointer to the server's read-write mutex.
+func (s *Server) GetMu() *sync.RWMutex {
+	return &s.mu
+}
+
 // Accept accepts incoming TCP connections and spawns a handler goroutine for each.
 func (s *Server) Accept() error {
 	for {
