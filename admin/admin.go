@@ -1,16 +1,74 @@
 package admin
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	exchange "github.com/Max20050/go_message_broker/Exchange"
 	"github.com/Max20050/go_message_broker/queues"
 	"github.com/google/uuid"
 )
+
+// ── Hardcoded credentials (temporary) ─────────────────────────────────
+var validAdminUsers = map[string]string{
+	"root": "root",
+}
+
+// ── Session store ─────────────────────────────────────────────────────
+
+type session struct {
+	username  string
+	createdAt time.Time
+}
+
+var (
+	sessionsMu sync.RWMutex
+	sessions   = make(map[string]*session)
+)
+
+const sessionCookieName = "gomq_session"
+const sessionMaxAge = 24 * time.Hour
+
+func generateToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func createSession(username string) string {
+	token := generateToken()
+	sessionsMu.Lock()
+	sessions[token] = &session{username: username, createdAt: time.Now()}
+	sessionsMu.Unlock()
+	return token
+}
+
+func getSession(token string) (*session, bool) {
+	sessionsMu.RLock()
+	defer sessionsMu.RUnlock()
+	s, ok := sessions[token]
+	if !ok {
+		return nil, false
+	}
+	if time.Since(s.createdAt) > sessionMaxAge {
+		return nil, false
+	}
+	return s, true
+}
+
+func deleteSession(token string) {
+	sessionsMu.Lock()
+	delete(sessions, token)
+	sessionsMu.Unlock()
+}
+
+// ── Server ────────────────────────────────────────────────────────────
 
 // Server holds references to broker state and exposes an HTTP admin panel.
 type Server struct {
@@ -59,31 +117,138 @@ type MessageInfo struct {
 	Status    string          `json:"status"` // "queued" or "inflight"
 }
 
+// ── Auth middleware ───────────────────────────────────────────────────
+
+// requireAuth wraps a handler, redirecting unauthenticated users to /login.
+func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie(sessionCookieName)
+		if err != nil || cookie.Value == "" {
+			// For API calls return 401, for pages redirect.
+			if isAPIRequest(r) {
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			} else {
+				http.Redirect(w, r, "/login", http.StatusSeeOther)
+			}
+			return
+		}
+		if _, ok := getSession(cookie.Value); !ok {
+			if isAPIRequest(r) {
+				http.Error(w, `{"error":"session expired"}`, http.StatusUnauthorized)
+			} else {
+				http.Redirect(w, r, "/login", http.StatusSeeOther)
+			}
+			return
+		}
+		next(w, r)
+	}
+}
+
+func isAPIRequest(r *http.Request) bool {
+	return len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api"
+}
+
 // Start launches the admin HTTP server on the specified port.
 func (s *Server) Start(wg *sync.WaitGroup) {
 	mux := http.NewServeMux()
 
-	// API endpoints ─────────────────────────────────────────────
-	mux.HandleFunc("/api/overview", s.handleOverview)
-	mux.HandleFunc("/api/queues", s.handleQueues)
-	mux.HandleFunc("/api/exchanges", s.handleExchanges)
-	mux.HandleFunc("/api/consumers", s.handleConsumers)
-	mux.HandleFunc("/api/messages", s.handleMessages)
-	mux.HandleFunc("/api/ack", s.handleAdminAck)
+	// Public routes ─────────────────────────────────────────────
+	mux.HandleFunc("/login", s.handleLoginPage)
+	mux.HandleFunc("/api/login", s.handleLogin)
+	mux.HandleFunc("/api/logout", s.handleLogout)
 
-	// Dashboard (single-page HTML) ─────────────────────────────
-	mux.HandleFunc("/", s.handleDashboard)
+	// Protected API endpoints ──────────────────────────────────
+	mux.HandleFunc("/api/overview", s.requireAuth(s.handleOverview))
+	mux.HandleFunc("/api/queues", s.requireAuth(s.handleQueues))
+	mux.HandleFunc("/api/exchanges", s.requireAuth(s.handleExchanges))
+	mux.HandleFunc("/api/consumers", s.requireAuth(s.handleConsumers))
+	mux.HandleFunc("/api/messages", s.requireAuth(s.handleMessages))
+	mux.HandleFunc("/api/ack", s.requireAuth(s.handleAdminAck))
+
+	// Protected dashboard ──────────────────────────────────────
+	mux.HandleFunc("/", s.requireAuth(s.handleDashboard))
 
 	addr := ":" + s.Port
 	fmt.Printf("Admin panel running on http://localhost%s\n", addr)
 
 	if wg != nil {
-		wg.Done() // signal that we started
+		wg.Done()
 	}
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("Admin server error: %v", err)
 	}
+}
+
+// ── Login / Logout handlers ───────────────────────────────────────────
+
+func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	// If already authenticated, redirect to dashboard.
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+		if _, ok := getSession(cookie.Value); ok {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(loginHTML))
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var creds struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, `{"error":"bad request"}`, http.StatusBadRequest)
+		return
+	}
+
+	expectedPwd, exists := validAdminUsers[creds.Username]
+	if !exists || expectedPwd != creds.Password {
+		w.WriteHeader(http.StatusUnauthorized)
+		writeJSON(w, map[string]string{"error": "invalid credentials"})
+		return
+	}
+
+	token := createSession(creds.Username)
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(sessionMaxAge.Seconds()),
+	})
+
+	writeJSON(w, map[string]string{"status": "ok", "message": "welcome " + creds.Username})
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
+		deleteSession(cookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   -1,
+	})
+	writeJSON(w, map[string]string{"status": "ok", "message": "logged out"})
 }
 
 // ── API handlers ──────────────────────────────────────────────────────

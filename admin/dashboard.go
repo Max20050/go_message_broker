@@ -381,6 +381,7 @@ const dashboardHTML = `<!DOCTYPE html>
                 <span>Broker Online</span>
             </div>
             <button class="btn-refresh" onclick="fetchAll()" title="Refresh now">↻ Refresh</button>
+            <button class="btn-refresh" onclick="handleLogout()" title="Sign out" style="border-color:rgba(244,63,94,.35);color:#f87171">⏻ Logout</button>
         </div>
     </div>
 </nav>
@@ -498,9 +499,21 @@ function closeModal() {
     hidePayloadPopover();
 }
 
+// ─── Logout ─────────────────────────────────────────────
+async function handleLogout() {
+    try {
+        await fetch('/api/logout', { method: 'POST' });
+    } catch(e) {}
+    window.location.href = '/login';
+}
+
 // ─── Data fetching ──────────────────────────────────────────
 async function fetchJSON(url) {
     const res = await fetch(url);
+    if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('unauthorized');
+    }
     return res.json();
 }
 
