@@ -72,9 +72,11 @@ func deleteSession(token string) {
 
 // Server holds references to broker state and exposes an HTTP admin panel.
 type Server struct {
-	Port      string
-	Queues    func() map[string]*queues.Queue // read-only accessor
-	Exchanges *exchange.Registry
+	Port         string
+	Queues       func() map[string]*queues.Queue // read-only accessor
+	DeclareQueue func(name string, size int) error
+	BindQueue    func(queueName, exchangeName, routingKey string) error
+	Exchanges    *exchange.Registry
 }
 
 // QueueInfo is the JSON representation of a queue for the admin API.
@@ -164,8 +166,12 @@ func (s *Server) Start(wg *sync.WaitGroup) {
 	mux.HandleFunc("/api/consumers", s.requireAuth(s.handleConsumers))
 	mux.HandleFunc("/api/messages", s.requireAuth(s.handleMessages))
 	mux.HandleFunc("/api/ack", s.requireAuth(s.handleAdminAck))
+	mux.HandleFunc("/api/declare-queue", s.requireAuth(s.handleDeclareQueue))
+	mux.HandleFunc("/api/declare-exchange", s.requireAuth(s.handleDeclareExchange))
+	mux.HandleFunc("/api/bind-queue", s.requireAuth(s.handleBindQueue))
 
-	// Protected dashboard ──────────────────────────────────────
+	// Protected pages ─────────────────────────────────────────
+	mux.HandleFunc("/editor", s.requireAuth(s.handleEditor))
 	mux.HandleFunc("/", s.requireAuth(s.handleDashboard))
 
 	addr := ":" + s.Port
@@ -429,11 +435,125 @@ func (s *Server) handleAdminAck(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, `{"error":"message not found in queue"}`, http.StatusNotFound)
 }
 
-// ── Dashboard HTML ────────────────────────────────────────────────────
+// ── Declare Queue handler (admin) ─────────────────────────────────────
+
+func (s *Server) handleDeclareQueue(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+		Size int    `json:"size"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		http.Error(w, `{"error":"name is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.DeclareQueue(req.Name, req.Size); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "ok", "message": fmt.Sprintf("queue %q declared", req.Name)})
+}
+
+// ── Declare Exchange handler (admin) ──────────────────────────────────
+
+func (s *Server) handleDeclareExchange(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" || req.Type == "" {
+		http.Error(w, `{"error":"name and type are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if _, err := s.Exchanges.Declare(req.Name, req.Type); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusConflict)
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "ok", "message": fmt.Sprintf("exchange %q declared", req.Name)})
+}
+
+// ── Bind Queue handler (admin) ────────────────────────────────────────
+
+func (s *Server) handleBindQueue(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		QueueName  string `json:"queue_name"`
+		Exchange   string `json:"exchange"`
+		RoutingKey string `json:"routing_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if req.QueueName == "" || req.Exchange == "" {
+		http.Error(w, `{"error":"queue_name and exchange are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.BindQueue(req.QueueName, req.Exchange, req.RoutingKey); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "ok", "message": "binding created"})
+}
+
+// ── Pages ─────────────────────────────────────────────────────────────
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(dashboardHTML))
+}
+
+func (s *Server) handleEditor(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(editorHTML))
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────

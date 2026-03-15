@@ -26,6 +26,7 @@ A lightweight, AMQP-inspired message broker written in Go. GoMQ provides queue-b
   - [Dashboard](#dashboard)
   - [Viewing Messages](#viewing-messages)
   - [Manual ACK from Admin](#manual-ack-from-admin)
+  - [Topology Editor](#topology-editor)
   - [REST API Endpoints](#rest-api-endpoints)
 - [Wire Protocol](#wire-protocol)
 - [Project Structure](#project-structure)
@@ -42,12 +43,13 @@ A lightweight, AMQP-inspired message broker written in Go. GoMQ provides queue-b
 │   TCP :8080                          HTTP :15672             │
 │   ┌──────────────┐                   ┌──────────────────┐    │
 │   │  TCP Server   │                  │   Admin Panel     │    │
-│   │  (auth, mux)  │                  │  (login, API,     │    │
-│   └──────┬───────┘                   │   dashboard)      │    │
+│   │  (auth, mux)  │                  │  (login, dashboard│    │
+│   └──────┬───────┘                   │   topology editor,│    │
+│          │                           │   REST API)       │    │
 │          │                           └────────┬─────────┘    │
 │          ▼                                    │              │
-│   ┌──────────────┐    ┌──────────────┐        │              │
-│   │  Exchanges    │───▶│   Queues      │◀──────┘              │
+│   ┌──────────────┐    ┌──────────────┐        │ create /     │
+│   │  Exchanges    │───▶│   Queues      │◀──────┘ bind / ack   │
 │   │  (registry)   │    │  (channels,   │                      │
 │   │               │    │   overflow,    │                      │
 │   │  direct       │    │   in-flight)   │                      │
@@ -63,14 +65,15 @@ A lightweight, AMQP-inspired message broker written in Go. GoMQ provides queue-b
 
 **Key components:**
 
-| Component      | Description |
-|---------------|-------------|
-| **TCP Server** | Accepts client connections on port `8080`, handles authentication, and dispatches protocol messages. |
-| **Exchanges**  | Route messages to queues based on type and routing key. Three types: `direct`, `fanout`, `topic`. |
-| **Queues**     | Buffered channel + overflow list. Each queue tracks in-flight messages and registered consumers. |
-| **Dispatcher** | Per-consumer goroutine that delivers messages from a queue to the consumer's TCP connection. |
-| **Admin Panel**| HTTP server on port `15672` with a web dashboard and REST API for monitoring and management. |
-| **Client Lib** | Go package (`client`) to connect, publish, consume, and acknowledge messages. |
+| Component         | Description |
+|-------------------|-------------|
+| **TCP Server**    | Accepts client connections on port `8080`, handles authentication, and dispatches protocol messages. |
+| **Exchanges**     | Route messages to queues based on type and routing key. Three types: `direct`, `fanout`, `topic`. |
+| **Queues**        | Buffered channel + overflow list. Each queue tracks in-flight messages and registered consumers. |
+| **Dispatcher**    | Per-consumer goroutine that delivers messages from a queue to the consumer's TCP connection. |
+| **Admin Panel**   | HTTP server on port `15672` with a web dashboard, topology editor, and REST API. |
+| **Topology Editor** | Visual drag-and-drop diagram editor for designing exchange/queue topologies and deploying them to the broker. |
+| **Client Lib**    | Go package (`client`) to connect, publish, consume, and acknowledge messages. |
 
 ---
 
@@ -330,6 +333,32 @@ This is useful for:
 - Clearing stuck in-flight messages from dead consumers
 - Manually draining a queue
 
+### Topology Editor
+
+The topology editor is a visual drag-and-drop diagram tool for designing your message broker architecture. Access it via the **✎ Editor** button in the dashboard navbar, or navigate directly to `http://localhost:15672/editor`.
+
+#### Workflow
+
+1. **Add nodes** – Click **Exchange** or **Queue** in the left sidebar to place a new node on the canvas.
+2. **Configure** – Click any node to edit its properties (name, type, buffer size) in the sidebar panel.
+3. **Connect** – Click an exchange's **output port** (dot on the right), then click a queue's **input port** (dot on the left) to create a binding. You'll be prompted for a routing key (for direct/topic exchanges; fanout skips this).
+4. **Arrange** – Drag nodes freely to organize your diagram.
+5. **Deploy** – Click the **🚀 Deploy** button to create all new exchanges, queues, and bindings on the live broker.
+
+#### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Load Topology** | Click **⟳ Load Topology** to import the broker's current state into the canvas. Live resources show a green **LIVE** badge and can't be edited. |
+| **Visual connections** | Bindings are drawn as bezier curves with routing key labels. |
+| **Property panel** | Select any node to see and edit its name, type (exchange), or buffer size (queue). Also shows current bindings. |
+| **Delete** | Press `Delete` key or use the delete button in the property panel to remove a node and its connections. |
+| **Deploy feedback** | Each deployed resource gets a **LIVE** badge. Errors are shown as toast notifications. |
+
+#### Binding Behavior
+
+> **Note:** Queues created from the **admin editor** do **not** auto-bind to the default exchange. They only get the bindings you explicitly draw. Queues created via the **TCP client** (`ch.DeclareQueue(...)`) still auto-bind to the default exchange for point-to-point messaging.
+
 ### REST API Endpoints
 
 All API endpoints require authentication (session cookie). Returns JSON.
@@ -344,6 +373,9 @@ All API endpoints require authentication (session cookie). Returns JSON.
 | `GET`   | `/api/consumers` | List all active consumers |
 | `GET`   | `/api/messages?queue=NAME` | List all messages in a specific queue |
 | `POST`  | `/api/ack`       | ACK a message. Body: `{"queue_name":"…","message_id":"…"}` |
+| `POST`  | `/api/declare-queue` | Create a queue. Body: `{"name":"…","size":1000}` |
+| `POST`  | `/api/declare-exchange` | Create an exchange. Body: `{"name":"…","type":"direct\|fanout\|topic"}` |
+| `POST`  | `/api/bind-queue` | Bind a queue to an exchange. Body: `{"queue_name":"…","exchange":"…","routing_key":"…"}` |
 
 **Example: Get all queues**
 ```bash
@@ -355,6 +387,24 @@ curl -b cookies.txt http://localhost:15672/api/queues
 curl -b cookies.txt -X POST http://localhost:15672/api/ack \
   -H "Content-Type: application/json" \
   -d '{"queue_name":"emails","message_id":"550e8400-e29b-41d4-a716-446655440000"}'
+```
+
+**Example: Create a queue from the API**
+```bash
+curl -b cookies.txt -X POST http://localhost:15672/api/declare-queue \
+  -H "Content-Type: application/json" \
+  -d '{"name":"notifications","size":500}'
+```
+
+**Example: Create an exchange and bind a queue**
+```bash
+curl -b cookies.txt -X POST http://localhost:15672/api/declare-exchange \
+  -H "Content-Type: application/json" \
+  -d '{"name":"events","type":"topic"}'
+
+curl -b cookies.txt -X POST http://localhost:15672/api/bind-queue \
+  -H "Content-Type: application/json" \
+  -d '{"queue_name":"notifications","exchange":"events","routing_key":"user.*"}
 ```
 
 ---
@@ -431,6 +481,7 @@ go_message_broker/
 ├── admin/
 │   ├── admin.go             # HTTP server, auth middleware, API handlers
 │   ├── dashboard.go         # Dashboard HTML (embedded Go string)
+│   ├── editor.go            # Topology editor HTML (embedded Go string)
 │   └── login.go             # Login page HTML (embedded Go string)
 ├── client/
 │   └── client.go            # Client library (connect, publish, consume, ack/nack)
@@ -490,3 +541,13 @@ This declares an `events` topic exchange and two queues (`billing`, `audit`) wit
 ### 5. Admin Panel
 
 Open `http://localhost:15672` in your browser and login with `root` / `root`.
+
+### 6. Topology Editor
+
+Navigate to `http://localhost:15672/editor` (or click **✎ Editor** in the dashboard).
+
+1. Click **⟳ Load Topology** to see what already exists on the broker
+2. Add a new exchange (e.g. `"notifications"` / `fanout`)
+3. Add two queues (e.g. `"email_notifications"`, `"sms_notifications"`)
+4. Connect the exchange's right port → each queue's left port
+5. Click **🚀 Deploy** — both queues and the exchange are created on the live broker with the bindings you drew

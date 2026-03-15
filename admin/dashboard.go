@@ -380,6 +380,7 @@ const dashboardHTML = `<!DOCTYPE html>
                 <div class="status-dot"></div>
                 <span>Broker Online</span>
             </div>
+            <a href="/editor" class="btn-refresh" style="text-decoration:none;border-color:rgba(139,92,246,.35);color:#a78bfa" title="Visual topology editor">✎ Editor</a>
             <button class="btn-refresh" onclick="fetchAll()" title="Refresh now">↻ Refresh</button>
             <button class="btn-refresh" onclick="handleLogout()" title="Sign out" style="border-color:rgba(244,63,94,.35);color:#f87171">⏻ Logout</button>
         </div>
