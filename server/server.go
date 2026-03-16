@@ -273,7 +273,7 @@ func (s *Server) handlePublish(conn net.Conn, msg models.RecievedMessage) {
 
 	stored := msg.ToStorage()
 	if err := ex.Route(routingKey, stored); err != nil {
-		fmt.Printf("Routing error: %v\n", err)
+		fmt.Printf("Routing error [%s exchange %q]: %v\n", ex.Type(), exchangeName, err)
 		sendError(conn, "PUBLISH", err.Error())
 		return
 	}

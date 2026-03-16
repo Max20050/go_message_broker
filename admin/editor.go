@@ -59,8 +59,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .btn-delete:hover{background:rgba(244,63,94,.18);border-color:var(--rose)}
 
 /* ── CANVAS ── */
-.canvas-wrap{position:fixed;top:56px;left:260px;right:0;bottom:0;overflow:hidden;z-index:1}
-.canvas{position:relative;width:4000px;height:4000px}
+.canvas-wrap{position:fixed;top:56px;left:260px;right:0;bottom:0;overflow:auto;z-index:1}
+.canvas{position:relative;width:4000px;height:4000px;transform-origin:0 0;transition:transform .15s ease}
 .canvas-grid{position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,255,255,.04) 1px,transparent 1px);background-size:28px 28px;pointer-events:none}
 svg.connections{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
 svg.connections path{fill:none;stroke:var(--blue);stroke-width:2;opacity:.6;transition:opacity .2s}
@@ -101,6 +101,43 @@ svg.connections text{fill:var(--text2);font-family:'JetBrains Mono',monospace;fo
 
 /* ── Existing badge ── */
 .badge-existing{font-size:.6rem;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,.12);color:var(--emerald);font-weight:600;margin-left:6px;text-transform:uppercase;letter-spacing:.5px}
+
+/* ── Zoom controls ── */
+.zoom-controls{display:flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:8px;padding:2px;background:rgba(0,0,0,.2)}
+.zoom-btn{width:28px;height:28px;border:none;border-radius:6px;background:transparent;color:var(--text2);font-family:inherit;font-size:1rem;font-weight:600;cursor:pointer;display:grid;place-items:center;transition:.15s}
+.zoom-btn:hover{background:var(--bg-card);color:var(--text)}
+.zoom-label{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--text2);min-width:42px;text-align:center;user-select:none;cursor:pointer}
+.zoom-label:hover{color:var(--text)}
+
+/* ── Help modal ── */
+.help-overlay{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);justify-content:center;align-items:flex-start;padding:40px 20px;overflow-y:auto}
+.help-overlay.open{display:flex}
+.help-modal{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 16px 60px rgba(0,0,0,.5);width:100%;max-width:760px;animation:helpIn .3s ease}
+@keyframes helpIn{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:translateY(0)}}
+.help-header{display:flex;align-items:center;justify-content:space-between;padding:22px 28px;border-bottom:1px solid var(--border)}
+.help-header h2{font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:10px}
+.help-close{background:none;border:none;color:var(--muted);font-size:1.4rem;cursor:pointer;padding:4px 8px;border-radius:6px;transition:.2s}
+.help-close:hover{color:var(--text);background:rgba(255,255,255,.06)}
+.help-body{padding:28px;max-height:75vh;overflow-y:auto}
+.help-section{margin-bottom:28px}
+.help-section:last-child{margin-bottom:0}
+.help-section h3{font-size:.92rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--text)}
+.help-section p{font-size:.84rem;color:var(--text2);line-height:1.7;margin-bottom:10px}
+.help-section p:last-child{margin-bottom:0}
+.help-card{background:rgba(0,0,0,.15);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:10px}
+.help-card .hc-title{font-size:.82rem;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.help-card .hc-title .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.help-card p{font-size:.78rem;color:var(--text2);line-height:1.6;margin:0}
+.help-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-top:6px}
+.help-table th{text-align:left;padding:6px 10px;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border)}
+.help-table td{padding:6px 10px;color:var(--text2);border-bottom:1px solid rgba(42,53,80,.3)}
+.help-table td:first-child{color:var(--cyan);font-family:'JetBrains Mono',monospace;font-size:.76rem;white-space:nowrap}
+.help-step{display:flex;gap:14px;margin-bottom:14px;align-items:flex-start}
+.help-step .step-num{width:26px;height:26px;border-radius:50%;background:var(--grad-blue);color:#fff;font-size:.72rem;font-weight:700;display:grid;place-items:center;flex-shrink:0;margin-top:1px}
+.help-step .step-text{font-size:.82rem;color:var(--text2);line-height:1.6}
+.help-step .step-text strong{color:var(--text);font-weight:600}
+.help-link{font-family:inherit;font-size:.78rem;padding:5px 14px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--text2);cursor:pointer;transition:.2s;text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+.help-link:hover{background:var(--bg-hover);color:var(--text);border-color:var(--blue)}
 </style>
 </head>
 <body>
@@ -111,11 +148,19 @@ svg.connections text{fill:var(--text2);font-family:'JetBrains Mono',monospace;fo
     <div class="logo">MQ</div>
     <span>Topology Editor</span>
   </div>
-  <div class="nav-links">
-    <a class="nav-link" href="/">← Dashboard</a>
-    <button class="nav-link" onclick="loadTopology()" title="Import current broker state">⟳ Load Topology</button>
-    <button class="nav-link" onclick="clearCanvas()">✕ Clear</button>
-    <button class="nav-link primary" onclick="deploy()">🚀 Deploy</button>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomOut()" title="Zoom out">−</button>
+      <span class="zoom-label" id="zoom-label" onclick="resetZoom()" title="Click to reset">100%</span>
+      <button class="zoom-btn" onclick="zoomIn()" title="Zoom in">+</button>
+    </div>
+    <div class="nav-links">
+      <button class="nav-link" onclick="toggleHelp()" title="How to use the editor">? Help</button>
+      <a class="nav-link" href="/">← Dashboard</a>
+      <button class="nav-link" onclick="loadTopology()" title="Import current broker state">⟳ Load Topology</button>
+      <button class="nav-link" onclick="clearCanvas()">✕ Clear</button>
+      <button class="nav-link primary" onclick="deploy()">🚀 Deploy</button>
+    </div>
   </div>
 </nav>
 
@@ -156,6 +201,129 @@ svg.connections text{fill:var(--text2);font-family:'JetBrains Mono',monospace;fo
   </div>
 </div>
 
+<!-- HELP MODAL -->
+<div class="help-overlay" id="help-overlay">
+  <div class="help-modal">
+    <div class="help-header">
+      <h2>📖 Topology Editor Guide</h2>
+      <button class="help-close" onclick="toggleHelp()" title="Close">✕</button>
+    </div>
+    <div class="help-body">
+
+      <!-- What is this? -->
+      <div class="help-section">
+        <h3>🎯 What is the Topology Editor?</h3>
+        <p>The Topology Editor lets you visually design your message broker architecture. You can create <strong>exchanges</strong> and <strong>queues</strong>, draw <strong>bindings</strong> between them, and <strong>deploy</strong> the entire topology to the live broker with one click.</p>
+        <p>Think of it as a whiteboard where you sketch how messages should flow through your system — then press a button to make it real.</p>
+      </div>
+
+      <!-- Exchanges -->
+      <div class="help-section">
+        <h3>🔀 Exchanges</h3>
+        <p>An <strong>exchange</strong> receives messages from publishers and routes them to one or more queues based on rules. Every message is published to an exchange, never directly to a queue.</p>
+        <p>There are three types of exchanges:</p>
+        <div class="help-card">
+          <div class="hc-title"><div class="dot" style="background:var(--blue)"></div> Direct</div>
+          <p>Routes messages to queues whose <strong>binding key exactly matches</strong> the message's routing key. Use this for point-to-point messaging where each message goes to one specific queue.</p>
+          <p style="margin-top:4px;color:var(--muted);font-size:.72rem">Example: routing key <span style="color:var(--cyan)">"payments.due"</span> → only queues bound with key <span style="color:var(--cyan)">"payments.due"</span></p>
+        </div>
+        <div class="help-card">
+          <div class="hc-title"><div class="dot" style="background:var(--purple)"></div> Fanout</div>
+          <p>Delivers every message to <strong>ALL bound queues</strong>, ignoring the routing key entirely. Use this for broadcasting — every subscriber gets every message.</p>
+          <p style="margin-top:4px;color:var(--muted);font-size:.72rem">Example: a "logs" fanout exchange sends every log to console, file, and database queues simultaneously.</p>
+        </div>
+        <div class="help-card">
+          <div class="hc-title"><div class="dot" style="background:var(--amber)"></div> Topic</div>
+          <p>Routes messages using <strong>pattern matching</strong> on the routing key. Words are separated by dots. Use <span style="color:var(--cyan)">*</span> to match exactly one word and <span style="color:var(--cyan)">#</span> to match zero or more words.</p>
+          <p style="margin-top:4px;color:var(--muted);font-size:.72rem">Example: pattern <span style="color:var(--cyan)">"payments.*"</span> matches <span style="color:var(--cyan)">"payments.due"</span> and <span style="color:var(--cyan)">"payments.received"</span> but not <span style="color:var(--cyan)">"orders.new"</span></p>
+        </div>
+      </div>
+
+      <!-- Queues -->
+      <div class="help-section">
+        <h3>📦 Queues</h3>
+        <p>A <strong>queue</strong> is a buffer that stores messages until a consumer picks them up. Messages are delivered in order (FIFO) and each message is delivered to exactly one consumer.</p>
+        <div class="help-card">
+          <div class="hc-title"><div class="dot" style="background:var(--cyan)"></div> Buffer Size</div>
+          <p>The buffer size determines how many messages the queue can hold in its fast channel. Messages beyond this limit go to an overflow list. Default is <strong>1000</strong>. Set higher for high-throughput queues.</p>
+        </div>
+        <div class="help-card">
+          <div class="hc-title"><div class="dot" style="background:var(--emerald)"></div> Consumers</div>
+          <p>Consumers are clients subscribed to a queue. When a message arrives, the broker delivers it to one available consumer. If no consumers are connected, messages wait in the queue.</p>
+        </div>
+      </div>
+
+      <!-- Bindings -->
+      <div class="help-section">
+        <h3>🔗 Bindings &amp; Routing Keys</h3>
+        <p>A <strong>binding</strong> is a link between an exchange and a queue. It tells the exchange: "send matching messages to this queue."</p>
+        <p>The <strong>routing key</strong> is a string attached to each binding that determines which messages the queue receives:</p>
+        <table class="help-table">
+          <tr><th>Exchange Type</th><th>How Routing Key Works</th></tr>
+          <tr><td>Direct</td><td>Must exactly match the message's routing key</td></tr>
+          <tr><td>Fanout</td><td>Ignored — all bound queues get every message</td></tr>
+          <tr><td>Topic</td><td>Pattern matched with <code style="color:var(--cyan)">*</code> (one word) and <code style="color:var(--cyan)">#</code> (zero+ words)</td></tr>
+        </table>
+      </div>
+
+      <!-- How to use -->
+      <div class="help-section">
+        <h3>🛠️ How to Use the Editor</h3>
+        <div class="help-step">
+          <div class="step-num">1</div>
+          <div class="step-text"><strong>Add an Exchange</strong> — Click the "Exchange" button in the left sidebar. A new node appears on the canvas. Click it to set its <strong>name</strong> and <strong>type</strong> (direct, fanout, or topic) in the properties panel.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">2</div>
+          <div class="step-text"><strong>Add Queues</strong> — Click the "Queue" button to add queue nodes. Set the <strong>name</strong> and <strong>buffer size</strong> in the properties panel.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">3</div>
+          <div class="step-text"><strong>Create Bindings</strong> — Click the <strong style="color:var(--blue)">circle on the right</strong> of an exchange (output port), then click the <strong style="color:var(--blue)">circle on the left</strong> of a queue (input port). For direct/topic exchanges, you’ll be asked for a routing key. For fanout, the binding is created immediately.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">4</div>
+          <div class="step-text"><strong>Arrange</strong> — Drag nodes to organize your diagram. Use <strong>Ctrl + Scroll</strong> or the zoom buttons to zoom in/out. Scroll to pan around.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">5</div>
+          <div class="step-text"><strong>Deploy</strong> — When you’re happy with the layout, click <strong style="color:var(--emerald)">🚀 Deploy</strong>. This creates all new exchanges, queues, and bindings on the live broker. Deployed nodes show a green <span class="badge-existing" style="display:inline">LIVE</span> badge and can no longer be edited.</div>
+        </div>
+      </div>
+
+      <!-- Load Topology -->
+      <div class="help-section">
+        <h3>⟳ Loading Existing Topology</h3>
+        <p>Click <strong>⟳ Load Topology</strong> in the navbar to import the broker's current state into the canvas. This lets you see what already exists and add new resources alongside live ones.</p>
+        <p>Live nodes appear with a <span class="badge-existing" style="display:inline">LIVE</span> badge. They cannot be renamed or deleted from the editor — they represent real resources on the broker.</p>
+      </div>
+
+      <!-- Keyboard shortcuts -->
+      <div class="help-section">
+        <h3>⌨️ Keyboard Shortcuts</h3>
+        <table class="help-table">
+          <tr><th>Shortcut</th><th>Action</th></tr>
+          <tr><td>Ctrl + Scroll</td><td>Zoom in / out (centered on cursor)</td></tr>
+          <tr><td>Ctrl + =</td><td>Zoom in</td></tr>
+          <tr><td>Ctrl + -</td><td>Zoom out</td></tr>
+          <tr><td>Ctrl + 0</td><td>Reset zoom to 100%</td></tr>
+          <tr><td>Delete</td><td>Delete selected node</td></tr>
+          <tr><td>Escape</td><td>Cancel connection or close help</td></tr>
+        </table>
+      </div>
+
+      <!-- Important note -->
+      <div class="help-section">
+        <h3>⚠️ Important Notes</h3>
+        <p>• Queues created from the editor are <strong>NOT</strong> auto-bound to the default exchange. They only get the bindings you explicitly draw. Queues created by TCP clients (code) still auto-bind for point-to-point messaging.</p>
+        <p>• The editor does not delete existing resources. It only creates new ones. To manage existing queues and messages, use the <a href="/" style="color:var(--blue)">Dashboard</a>.</p>
+        <p>• After deploying, you can connect consumers and publishers to the new queues using the Go client library.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── State ──────────────────────────────────────────────────
 let nodes = [];       // {id, type:'exchange'|'queue', name, x, y, subtype?, size?, existing?}
@@ -164,10 +332,41 @@ let nextId = 1;
 let selectedId = null;
 let connectingFrom = null; // node id we're drawing a connection from
 let dragState = null;      // {nodeId, offsetX, offsetY}
+let currentZoom = 1;
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.15;
 
 const canvas = document.getElementById('canvas');
 const wrap = document.getElementById('canvas-wrap');
 const svgEl = document.getElementById('svg-connections');
+
+// ─── Zoom ───────────────────────────────────────────────────
+function setZoom(z, centerX, centerY) {
+  const oldZoom = currentZoom;
+  currentZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+  canvas.style.transform = 'scale(' + currentZoom + ')';
+  document.getElementById('zoom-label').textContent = Math.round(currentZoom * 100) + '%';
+  // Adjust scroll to keep the zoom centered
+  if (centerX !== undefined && centerY !== undefined) {
+    wrap.scrollLeft = (wrap.scrollLeft + centerX) * (currentZoom / oldZoom) - centerX;
+    wrap.scrollTop  = (wrap.scrollTop + centerY) * (currentZoom / oldZoom) - centerY;
+  }
+}
+function zoomIn()  { setZoom(currentZoom + ZOOM_STEP); }
+function zoomOut() { setZoom(currentZoom - ZOOM_STEP); }
+function resetZoom() { setZoom(1); }
+
+// Ctrl + scroll wheel to zoom
+wrap.addEventListener('wheel', e => {
+  if (!e.ctrlKey && !e.metaKey) return; // normal scroll pans
+  e.preventDefault();
+  const rect = wrap.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+  setZoom(currentZoom + delta, cx, cy);
+}, {passive: false});
 
 // ─── Node creation ──────────────────────────────────────────
 function addExchangeNode(name, subtype, x, y, existing) {
@@ -228,8 +427,9 @@ function renderNode(n) {
     const wrapRect = wrap.getBoundingClientRect();
     dragState = {
       nodeId: n.id,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
+      // Offset in canvas-space (divide by zoom)
+      offsetX: (e.clientX - rect.left) / currentZoom,
+      offsetY: (e.clientY - rect.top) / currentZoom,
       scrollX: wrap.scrollLeft,
       scrollY: wrap.scrollTop,
       wrapLeft: wrapRect.left,
@@ -357,8 +557,9 @@ document.addEventListener('mousemove', e => {
   if (!dragState) return;
   const n = nodes.find(n => n.id === dragState.nodeId);
   if (!n) return;
-  const x = e.clientX - dragState.wrapLeft + wrap.scrollLeft - dragState.offsetX;
-  const y = e.clientY - dragState.wrapTop + wrap.scrollTop - dragState.offsetY;
+  // Divide by zoom so pixel movement maps correctly to canvas coords
+  const x = (e.clientX - dragState.wrapLeft + wrap.scrollLeft) / currentZoom - dragState.offsetX;
+  const y = (e.clientY - dragState.wrapTop + wrap.scrollTop) / currentZoom - dragState.offsetY;
   n.x = Math.max(0, x);
   n.y = Math.max(0, y);
   const el = document.getElementById('node-' + n.id);
@@ -394,16 +595,23 @@ canvas.addEventListener('click', e => {
   }
 });
 
-// Escape cancels connection
+// Escape cancels connection, Delete removes node, Ctrl+/- zooms
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     connectingFrom = null;
     document.querySelectorAll('.port.active').forEach(p => p.classList.remove('active'));
+    // Also close help if open
+    const helpEl = document.getElementById('help-overlay');
+    if (helpEl.classList.contains('open')) helpEl.classList.remove('open');
   }
   if (e.key === 'Delete' && selectedId !== null) {
     const n = nodes.find(n => n.id === selectedId);
     if (n && !n.existing) deleteNode(selectedId);
   }
+  // Zoom keyboard shortcuts
+  if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomIn(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); zoomOut(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); resetZoom(); }
 });
 
 function promptRoutingKey(fromId, toId) {
@@ -588,6 +796,14 @@ function toast(msg, type) {
   setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .3s'},2200);
   setTimeout(()=>el.remove(),2600);
 }
+
+// ─── Help modal ─────────────────────────────────────────────
+function toggleHelp() {
+  document.getElementById('help-overlay').classList.toggle('open');
+}
+document.getElementById('help-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) toggleHelp();
+});
 </script>
 </body>
 </html>`
