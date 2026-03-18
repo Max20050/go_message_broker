@@ -1,0 +1,3 @@
+# Persistence state files — generated at runtime, not tracked in git
+*.json
+*.json.tmp

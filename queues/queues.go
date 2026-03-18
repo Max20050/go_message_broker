@@ -59,6 +59,24 @@ func (q *Queue) Enqueue(m models.StoredMessage) {
 	}
 }
 
+// EnqueueDirect adds a message without generating a new ID.
+// Used by the persistence layer to restore messages with their original IDs.
+func (q *Queue) EnqueueDirect(m models.StoredMessage) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if len(q.Channel) == cap(q.Channel) {
+		q.overflow.PushBack(m)
+	} else {
+		q.Channel <- m
+	}
+}
+
+// Capacity returns the buffer size of the queue channel.
+func (q *Queue) Capacity() int {
+	return cap(q.Channel)
+}
+
 // Dequeue blocks until a message is available and returns it.
 func (q *Queue) Dequeue() (models.StoredMessage, bool) {
 	msg, ok := <-q.Channel
